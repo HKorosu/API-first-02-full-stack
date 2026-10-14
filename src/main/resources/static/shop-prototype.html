@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop API - UI Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", sans-serif;
+      color: #18212f;
+      background: #f3f6fa;
+    }
+    body { max-width: 980px; margin: 0 auto; padding: 32px 20px 56px; }
+    h1 { margin-bottom: 8px; }
+    h2 { margin-top: 0; font-size: 1.15rem; }
+    p { color: #526174; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    section { margin: 16px 0; padding: 20px; border: 1px solid #dce3ec; border-radius: 12px; background: white; }
+    label { display: block; margin: 12px 0 5px; font-size: .9rem; font-weight: 600; }
+    input, button { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #c8d2df; border-radius: 7px; font: inherit; }
+    button { margin-top: 14px; border: 0; color: white; background: #2059c7; font-weight: 700; cursor: pointer; }
+    button.secondary { width: auto; margin: 0 0 12px; padding: 8px 12px; }
+    button:hover { background: #17469f; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 9px 7px; border-bottom: 1px solid #e5eaf0; text-align: left; }
+    th { color: #526174; font-size: .85rem; }
+    pre { overflow: auto; min-height: 45px; margin: 0; padding: 12px; border-radius: 7px; color: #e7edf7; background: #172235; white-space: pre-wrap; }
+    .hint { font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>Shop API</h1>
+  <p>Prototype UI kết nối các luồng khách hàng, sản phẩm và đơn hàng qua Mock Server.</p>
+
+  <section>
+    <label for="api-base">Mock Server URL</label>
+    <input id="api-base" type="url" value="http://127.0.0.1:4010">
+    <p class="hint">Khởi chạy Prism với <code>shop-api.yaml</code> trước khi dùng prototype.</p>
+  </section>
+
+  <section>
+    <h2>Sản phẩm</h2>
+    <button id="load-products" class="secondary" type="button">Tải sản phẩm</button>
+    <table>
+      <thead><tr><th>ID</th><th>Tên</th><th>Giá</th><th>Tồn kho</th></tr></thead>
+      <tbody id="products"><tr><td colspan="4">Chưa tải dữ liệu.</td></tr></tbody>
+    </table>
+  </section>
+
+  <div class="grid">
+    <section>
+      <h2>Tạo khách hàng</h2>
+      <form id="customer-form">
+        <label for="customer-name">Họ tên</label>
+        <input id="customer-name" required maxlength="100" value="Nguyen An">
+        <label for="customer-email">Email</label>
+        <input id="customer-email" type="email" required maxlength="254" value="an@example.com">
+        <label for="customer-phone">Điện thoại</label>
+        <input id="customer-phone" maxlength="30" value="+84901234567">
+        <label for="customer-address">Địa chỉ</label>
+        <input id="customer-address" maxlength="255" value="12 Le Loi, Ho Chi Minh City">
+        <button type="submit">Tạo khách hàng</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Tạo đơn hàng</h2>
+      <form id="order-form">
+        <label for="customer-id">Customer ID</label>
+        <input id="customer-id" type="number" min="1" required value="1">
+        <label for="product-id">Product ID</label>
+        <input id="product-id" type="number" min="1" required value="101">
+        <label for="quantity">Số lượng</label>
+        <input id="quantity" type="number" min="1" required value="2">
+        <button type="submit">Đặt hàng</button>
+      </form>
+    </section>
+  </div>
+
+  <section aria-live="polite">
+    <h2>Kết quả API</h2>
+    <pre id="result">Sẵn sàng kết nối Mock Server.</pre>
+  </section>
+
+  <script>
+    const apiBase = document.querySelector("#api-base");
+    const result = document.querySelector("#result");
+
+    async function request(path, options) {
+      const base = apiBase.value.trim().replace(/\/+$/, "");
+      const response = await fetch(base + path, options);
+      const body = response.status === 204 ? null : await response.json();
+      if (!response.ok) {
+        throw new Error(JSON.stringify(body));
+      }
+      return { status: response.status, location: response.headers.get("Location"), body };
+    }
+
+    function showResult(value) {
+      result.textContent = JSON.stringify(value, null, 2);
+    }
+
+    function showError(error) {
+      result.textContent = "Lỗi: " + error.message;
+    }
+
+    document.querySelector("#load-products").addEventListener("click", async () => {
+      try {
+        const response = await request("/products?page=0&size=10&sort=price,desc");
+        const rows = response.body.content.map((product) => {
+          const row = document.createElement("tr");
+          [product.id, product.name, product.price, product.stock].forEach((value) => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.append(cell);
+          });
+          return row;
+        });
+        const tableBody = document.querySelector("#products");
+        tableBody.replaceChildren(...rows);
+        showResult(response);
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    document.querySelector("#customer-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const customer = {
+        name: document.querySelector("#customer-name").value,
+        email: document.querySelector("#customer-email").value,
+        phone: document.querySelector("#customer-phone").value,
+        address: document.querySelector("#customer-address").value
+      };
+      try {
+        const response = await request("/customers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(customer)
+        });
+        if (response.body.id) {
+          document.querySelector("#customer-id").value = response.body.id;
+        }
+        showResult(response);
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    document.querySelector("#order-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const order = {
+        customerId: Number(document.querySelector("#customer-id").value),
+        items: [{
+          productId: Number(document.querySelector("#product-id").value),
+          quantity: Number(document.querySelector("#quantity").value)
+        }]
+      };
+      try {
+        showResult(await request("/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(order)
+        }));
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    document.querySelector("#load-products").click();
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "info": {
+    "name": "Shop API - Contract and Checkout Flow",
+    "description": "Smoke contract checks for authentication, catalog, checkout, order transitions, and stock restoration. Run against a seeded Spring Boot backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "apiUrl", "value": "http://localhost:18081/api/v1" },
+    { "key": "email", "value": "" },
+    { "key": "password", "value": "shop12345" },
+    { "key": "customerId", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "stockBefore", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Register customer",
+      "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["if (!pm.collectionVariables.get('email')) pm.collectionVariables.set('email', `newman-${Date.now()}@example.test`);"] } }, { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('registration returns 201', () => pm.response.to.have.status(201));", "const body = pm.response.json();", "pm.test('response contains customer and demo token', () => { pm.expect(body.customer.id).to.exist; pm.expect(body.token).to.be.a('string'); });", "pm.collectionVariables.set('customerId', body.customer.id);"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Newman Customer\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"phone\": \"+84901234567\",\n  \"address\": \"Ho Chi Minh City\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{apiUrl}}/auth/register" }
+    },
+    {
+      "name": "Login customer",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('login returns 200', () => pm.response.to.have.status(200));", "pm.test('demo token is returned', () => pm.expect(pm.response.json().token).to.be.a('string'));"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{apiUrl}}/auth/login" }
+    },
+    {
+      "name": "List categories",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('categories returns a non-empty array', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty; });"] } }],
+      "request": { "method": "GET", "url": "{{apiUrl}}/categories" }
+    },
+    {
+      "name": "Search and page products",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('product page follows contract', () => { pm.response.to.have.status(200); const body=pm.response.json(); pm.expect(body.content).to.be.an('array').that.is.not.empty; pm.expect(body.page).to.eql(0); });", "const products=pm.response.json().content; pm.collectionVariables.set('productId', products[0].id); pm.collectionVariables.set('stockBefore', products[0].stock);"] } }],
+      "request": { "method": "GET", "url": "{{apiUrl}}/products?page=0&size=10&sort=price%2Casc&minPrice=0&maxPrice=500" }
+    },
+    {
+      "name": "Read chosen product",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('product detail returns 200', () => pm.response.to.have.status(200));", "pm.test('product has price and stock', () => { const p=pm.response.json(); pm.expect(p.price).to.be.a('number'); pm.expect(p.stock).to.be.a('number'); });"] } }],
+      "request": { "method": "GET", "url": "{{apiUrl}}/products/{{productId}}" }
+    },
+    {
+      "name": "Checkout one item",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('checkout returns a pending created order', () => { pm.response.to.have.status(201); const body=pm.response.json(); pm.expect(body.status).to.eql('PENDING'); pm.expect(body.totalAmount).to.be.above(0); pm.expect(pm.response.headers.get('Location')).to.include('/orders/'); });", "pm.collectionVariables.set('orderId', pm.response.json().id);"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customerId\": {{customerId}},\n  \"items\": [{ \"productId\": {{productId}}, \"quantity\": 1 }]\n}", "options": { "raw": { "language": "json" } } }, "url": "{{apiUrl}}/orders" }
+    },
+    {
+      "name": "Mark order paid",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('order transitions to PAID', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('PAID'); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{ \"status\": \"PAID\" }", "options": { "raw": { "language": "json" } } }, "url": "{{apiUrl}}/orders/{{orderId}}" }
+    },
+    {
+      "name": "Cancel order and restore inventory",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('cancellation succeeds', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('CANCELLED'); });"] } }],
+      "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{ \"status\": \"CANCELLED\" }", "options": { "raw": { "language": "json" } } }, "url": "{{apiUrl}}/orders/{{orderId}}" }
+    },
+    {
+      "name": "Verify inventory restored",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('canceled order restored exactly one unit', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().stock).to.eql(Number(pm.collectionVariables.get('stockBefore'))); });"] } }],
+      "request": { "method": "GET", "url": "{{apiUrl}}/products/{{productId}}" }
+    }
+  ]
+}
